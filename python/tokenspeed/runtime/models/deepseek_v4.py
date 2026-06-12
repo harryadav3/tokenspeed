@@ -52,15 +52,15 @@ from tokenspeed_kernel.ops.attention.cuda.deepseek_v4 import (
 from tokenspeed_kernel.ops.attention.triton.deepseek_v4 import (
     deepseek_v4_indexer_decode_metadata_compute,
 )
-from tokenspeed_kernel.ops.moe.triton import (
-    stage_deepseek_v4_mega_moe_inputs as _stage_deepseek_v4_mega_moe_inputs,
-)
-from tokenspeed_kernel.ops.routing.cuda import (
+from tokenspeed_kernel.platform import current_platform
+from tokenspeed_kernel.thirdparty.cuda import (
     dsv3_router_gemm,
     hash_softplus_sqrt_topk_flash,
     softplus_sqrt_topk_flash,
 )
-from tokenspeed_kernel.platform import current_platform
+from tokenspeed_kernel.thirdparty.triton import (
+    stage_deepseek_v4_mega_moe_inputs as _stage_deepseek_v4_mega_moe_inputs,
+)
 from tokenspeed_kernel.thirdparty.trtllm import (
     fast_topk_v2,
 )
@@ -115,11 +115,11 @@ from tokenspeed.runtime.layers.linear import (
     ReplicatedLinear,
     RowParallelLinear,
 )
-from tokenspeed.runtime.layers.moe.checkpoint import (
+from tokenspeed.runtime.layers.moe import (
     ExpertCheckpointSchema,
     build_moe_checkpoint_loader,
 )
-from tokenspeed.runtime.layers.moe.layer import MoELayer
+from tokenspeed.runtime.layers.moe.expert import MoELayer
 from tokenspeed.runtime.layers.moe.topk import (
     BypassedTopKOutput,
     StandardTopKOutput,
@@ -2467,7 +2467,7 @@ class DeepseekV4MoE(nn.Module):
             self.topk = None
         else:
             routed_quant_config = Mxfp4Config(
-                ignored_layers=getattr(quant_config, "ignored_layers", None),
+                ignored_layers=quant_config.ignored_layers,
                 is_checkpoint_mxfp4_serialized=True,
             )
             self.experts = MoELayer(
@@ -2497,9 +2497,6 @@ class DeepseekV4MoE(nn.Module):
                 renormalize=config.norm_topk_prob,
                 correction_bias=self.gate.e_score_correction_bias,
                 routed_scaling_factor=self.routed_scaling_factor,
-                apply_routed_scaling_factor_on_output=(
-                    self.experts.apply_routed_scaling_factor_on_output
-                ),
                 output_format=self.experts.topk_output_format,
             )
 
